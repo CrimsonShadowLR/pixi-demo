@@ -1,7 +1,7 @@
 import type { HeroDef, HeroId } from "@/game/types";
 
-// Three playable heroes (GDD §Heroes). Same combat vocabulary, different stat
-// distributions. Each is tuned toward one victory condition but can play any level.
+// Two playable heroes (GDD §Heroes). Same combat vocabulary, different stat
+// distributions. Each can play any level but is tuned toward certain conditions.
 export const HEROES: Record<HeroId, HeroDef> = {
   warrior: {
     id: "warrior",
@@ -12,39 +12,27 @@ export const HEROES: Record<HeroId, HeroDef> = {
     speed: 2.4,
     attackType: "melee",
     damage: 34,
-    attackRange: 58,
+    attackRange: 82,
+    attackArc: -0.35, // wide ~110-deg sweep — cleaves a crowd
+    stunMs: 500,
     attackCooldown: 420,
-    bonusCondition: "kill_all",
-    blurb: "Highest durability and melee burst. Best at clearing rooms and holding ground.",
+    bonusConditions: ["kill_all", "survive", "protect"],
+    blurb: "Wide cleaving swing that stuns. Highest durability — best at clearing rooms and holding ground.",
   },
-  rogue: {
-    id: "rogue",
-    name: "Rogue",
-    role: "Scout / Escape Artist",
-    color: 0x39c06a,
-    maxHp: 95,
-    speed: 4.1,
-    attackType: "melee",
-    damage: 22,
-    attackRange: 46,
-    attackCooldown: 260,
-    bonusCondition: "escape",
-    blurb: "Fast and slippery with quick strikes. Built to slip past patrols and reach the exit.",
-  },
-  ranger: {
-    id: "ranger",
-    name: "Ranger",
-    role: "Hunter / Collector",
-    color: 0x3b82e2,
-    maxHp: 110,
-    speed: 3.0,
+  scout: {
+    id: "scout",
+    name: "Scout",
+    role: "Skirmisher / Explorer",
+    color: 0x2ec4b6,
+    maxHp: 100,
+    speed: 3.6,
     attackType: "ranged",
-    damage: 20,
+    damage: 21,
     attackRange: 26,
-    attackCooldown: 360,
-    bonusCondition: "collect",
-    blurb: "Engages safely from range. Efficient explorer for hunting down scattered objectives.",
+    attackCooldown: 300,
+    bonusConditions: ["escape", "collect"],
+    blurb: "Fast and ranged — kites enemies and covers ground. Built to slip to the exit and hunt down objectives.",
   },
 };
 
-export const HERO_ORDER: HeroId[] = ["warrior", "rogue", "ranger"];
+export const HERO_ORDER: HeroId[] = ["warrior", "scout"];

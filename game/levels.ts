@@ -18,8 +18,9 @@ export const LEVELS: LevelDef[] = [
     name: "Catacomb Run",
     environment: "Dungeon",
     victory: "escape",
-    objectiveText: "Reach the exit. Patrols hit hard — speed beats brawling here.",
+    objectiveText: "Reach the exit before time runs out. Speed beats brawling here.",
     tileSize: 44,
+    timeLimitMs: 10_000,
     layout: [
       "#####################",
       "#S..................#",

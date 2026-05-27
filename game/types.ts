@@ -1,7 +1,7 @@
 // Shared game types. Pure data — no Pixi imports here so the model stays
 // reasoning-friendly and engine code can depend on it freely.
 
-export type HeroId = "warrior" | "rogue" | "ranger";
+export type HeroId = "warrior" | "scout";
 
 export type VictoryType = "escape" | "kill_all" | "collect" | "survive" | "protect";
 
@@ -18,10 +18,17 @@ export interface HeroDef {
   damage: number;
   /** Melee reach, or projectile spawn offset for ranged. */
   attackRange: number;
+  /**
+   * Melee cone width as a dot-product threshold: a hit lands when
+   * dot(facing, dirToEnemy) >= this. Lower = wider swing. Defaults to 0.25.
+   */
+  attackArc?: number;
+  /** If set, melee hits stun the enemy for this many ms. */
+  stunMs?: number;
   /** Milliseconds between attacks. */
   attackCooldown: number;
-  /** Victory condition this hero is statistically built for (GDD §Heroes). */
-  bonusCondition: VictoryType;
+  /** Victory conditions this hero is statistically built for (GDD §Heroes). */
+  bonusConditions: VictoryType[];
   blurb: string;
 }
 
@@ -32,6 +39,8 @@ export interface LevelDef {
   victory: VictoryType;
   objectiveText: string;
   tileSize: number;
+  /** Optional countdown in ms; if the player does not win before it hits 0, they lose. */
+  timeLimitMs?: number;
   /** Rows of tile glyphs. Legend in game/Maze.ts. */
   layout: string[];
 }
@@ -44,6 +53,10 @@ export interface HudState {
   objective: string;
   /** Short progress string, e.g. "Enemies 2/5" or "Relics 3/6". */
   progress: string;
+  /** Remaining time as M:SS — only present on timed levels. */
+  timer?: string;
+  /** True when remaining time is low, so the HUD can highlight it. */
+  timerUrgent?: boolean;
 }
 
 export type GameResult = "win" | "lose";

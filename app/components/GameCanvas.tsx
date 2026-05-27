@@ -5,15 +5,15 @@ import { Application } from "pixi.js";
 import { Game } from "@/game/Game";
 import { HEROES, HERO_ORDER } from "@/game/heroes";
 import { LEVELS } from "@/game/levels";
-import type { HeroId, HudState } from "@/game/types";
+import type { HeroId, HudState, VictoryType } from "@/game/types";
 
 const VIEW_W = 896;
 const VIEW_H = 572; // matches the 13-row * 44px maze height
 
 type Screen = "menu" | "playing" | "win" | "lose";
 
-function recommendedHero(victory: string): string {
-  const hero = HERO_ORDER.map((id) => HEROES[id]).find((h) => h.bonusCondition === victory);
+function recommendedHero(victory: VictoryType): string {
+  const hero = HERO_ORDER.map((id) => HEROES[id]).find((h) => h.bonusConditions.includes(victory));
   return hero?.name ?? "Any";
 }
 
@@ -77,33 +77,35 @@ export default function GameCanvas() {
   const hpPct = hud ? Math.max(0, (hud.hp / hud.maxHp) * 100) : 100;
 
   return (
-    <div className="relative inline-block w-full max-w-[896px]" style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
-      {/* Pixi canvas mounts here */}
-      <div ref={hostRef} className="h-full w-full" />
-
-      {/* In-game HUD */}
+    <div className="w-full max-w-[896px]">
+      {/* Status bar — lives ABOVE the canvas so it never covers the maze */}
       {screen === "playing" && hud && (
-        <div className="pointer-events-none absolute inset-0 p-4 font-mono text-sm text-white">
-          <div className="inline-block rounded-lg bg-black/55 px-4 py-3 backdrop-blur-sm">
-            <div className="font-semibold">{hud.heroName}</div>
-            <div className="mt-1 flex items-center gap-2">
-              <div className="h-2.5 w-40 overflow-hidden rounded-full bg-white/20">
-                <div
-                  className="h-full rounded-full bg-emerald-400 transition-[width] duration-150"
-                  style={{ width: `${hpPct}%` }}
-                />
-              </div>
-              <span>
-                {hud.hp}/{hud.maxHp}
-              </span>
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-black/60 px-4 py-2 font-mono text-sm text-white">
+          <span className="font-semibold">{hud.heroName}</span>
+          <div className="flex items-center gap-2">
+            <div className="h-2.5 w-36 overflow-hidden rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-emerald-400 transition-[width] duration-150"
+                style={{ width: `${hpPct}%` }}
+              />
             </div>
-            <div className="mt-1 text-amber-300">{hud.progress}</div>
+            <span>
+              {hud.hp}/{hud.maxHp}
+            </span>
           </div>
-          <div className="absolute bottom-4 left-4 rounded-md bg-black/45 px-3 py-1.5 text-xs text-zinc-300">
-            WASD / arrows to move · J or Space to attack
-          </div>
+          <span className="text-amber-300">{hud.progress}</span>
+          {hud.timer && (
+            <span className={`font-semibold ${hud.timerUrgent ? "animate-pulse text-rose-400" : "text-sky-300"}`}>
+              Time {hud.timer}
+            </span>
+          )}
+          <span className="ml-auto hidden text-xs text-zinc-400 sm:block">WASD / arrows · J / Space to attack</span>
         </div>
       )}
+
+      {/* Canvas + full-cover overlays (menu, results) */}
+      <div className="relative w-full" style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
+        <div ref={hostRef} className="h-full w-full" />
 
       {/* Pre-level menu */}
       {screen === "menu" && (
@@ -115,7 +117,7 @@ export default function GameCanvas() {
 
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">Hero</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {HERO_ORDER.map((id) => {
                 const h = HEROES[id];
                 const active = id === heroId;
@@ -214,6 +216,7 @@ export default function GameCanvas() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -53,6 +53,7 @@ export class Game {
   private over = false;
   private hudTimer = 0;
   private lastProgress = "";
+  private timeLeft: number; // ms remaining on a timed level (0 if untimed)
 
   constructor(app: Application, level: LevelDef, hero: HeroDef, hooks: GameHooks) {
     this.app = app;
@@ -61,6 +62,7 @@ export class Game {
     this.hooks = hooks;
     this.input = createInput();
 
+    this.timeLeft = level.timeLimitMs ?? 0;
     this.maze = new Maze(level);
     this.player = new Player(hero, this.maze.start.x, this.maze.start.y);
 
@@ -131,6 +133,15 @@ export class Game {
       this.enemies = this.enemies.filter((e) => !e.dead);
     }
 
+    if (this.level.timeLimitMs) {
+      this.timeLeft -= dtMs;
+      if (this.timeLeft <= 0) {
+        this.timeLeft = 0;
+        this.pushHud(true);
+        return this.end("lose");
+      }
+    }
+
     this.updateCamera();
     this.hudTimer += dtMs;
     this.pushHud(false);
@@ -146,23 +157,26 @@ export class Game {
       return;
     }
 
-    // Melee: damage enemies in front within reach, and flash a swing wedge.
+    // Melee: damage (and optionally stun) enemies inside the facing cone.
     const reach = this.hero.attackRange;
+    const arc = this.hero.attackArc ?? 0.25;
     for (const e of this.enemies) {
       const dx = e.x - this.player.x;
       const dy = e.y - this.player.y;
       const dist = Math.hypot(dx, dy);
       if (dist > reach + e.half) continue;
       const dot = (dx * facing.x + dy * facing.y) / (dist || 1);
-      if (dot >= 0.25) e.takeDamage(this.hero.damage);
+      if (dot >= arc) {
+        e.takeDamage(this.hero.damage);
+        if (this.hero.stunMs) e.stun(this.hero.stunMs);
+      }
     }
-    this.spawnSwingFx(reach);
+    this.spawnSwingFx(reach, Math.acos(Math.max(-1, Math.min(1, arc))));
   }
 
-  private spawnSwingFx(reach: number) {
+  private spawnSwingFx(reach: number, spread: number) {
     const { facing } = this.player;
     const ang = Math.atan2(facing.y, facing.x);
-    const spread = 0.7;
     const g = new Graphics();
     g.moveTo(0, 0)
       .arc(0, 0, reach, ang - spread, ang + spread)
@@ -262,12 +276,23 @@ export class Game {
     if (!force && this.hudTimer < 120 && progress === this.lastProgress) return;
     this.hudTimer = 0;
     this.lastProgress = progress;
+
+    let timer: string | undefined;
+    let timerUrgent = false;
+    if (this.level.timeLimitMs) {
+      const secs = Math.max(0, Math.ceil(this.timeLeft / 1000));
+      timer = `${Math.floor(secs / 60)}:${(secs % 60).toString().padStart(2, "0")}`;
+      timerUrgent = this.timeLeft <= 4_000;
+    }
+
     const hud: HudState = {
       heroName: this.hero.name,
       hp: Math.ceil(this.player.hp),
       maxHp: this.player.maxHp,
       objective: this.level.objectiveText,
       progress,
+      timer,
+      timerUrgent,
     };
     this.hooks.onHud(hud);
   }

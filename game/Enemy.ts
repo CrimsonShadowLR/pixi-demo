@@ -36,6 +36,7 @@ export class Enemy {
   private contactTimer = 0; // ms until grunt can deal contact damage again
   private shootTimer = 900; // ms until archer's next shot
   private hurtFlash = 0;
+  private stunTimer = 0; // ms remaining frozen (no move / attack / shoot)
 
   constructor(kind: EnemyKind, x: number, y: number) {
     this.kind = kind;
@@ -53,7 +54,7 @@ export class Enemy {
     this.view.position.set(x, y);
   }
 
-  private draw(color: number) {
+  private draw(color: number, stunned = false) {
     this.body.clear();
     if (this.kind === "grunt") {
       this.body.rect(-this.half, -this.half, this.half * 2, this.half * 2);
@@ -61,7 +62,8 @@ export class Enemy {
       // Diamond for archers so the two kinds read apart at a glance.
       this.body.poly([0, -this.half, this.half, 0, 0, this.half, -this.half, 0]);
     }
-    this.body.fill(color).stroke({ color: 0x000000, width: 2 });
+    // Yellow outline while stunned so the freeze reads at a glance.
+    this.body.fill(color).stroke(stunned ? { color: 0xffe066, width: 3 } : { color: 0x000000, width: 2 });
   }
 
   private moveToward(dx: number, dy: number, dtFrame: number, maze: Maze) {
@@ -74,36 +76,44 @@ export class Enemy {
   }
 
   update(dtFrame: number, dtMs: number, player: Player, maze: Maze, ctx: EnemyContext) {
-    const dx = player.x - this.x;
-    const dy = player.y - this.y;
-    const dist = Math.hypot(dx, dy);
-
     if (this.contactTimer > 0) this.contactTimer -= dtMs;
     if (this.shootTimer > 0) this.shootTimer -= dtMs;
+    if (this.hurtFlash > 0) this.hurtFlash -= dtMs;
+    const stunned = this.stunTimer > 0;
+    if (stunned) this.stunTimer -= dtMs;
 
-    if (dist < this.stats.aggro) {
-      if (this.kind === "grunt") {
-        this.moveToward(dx, dy, dtFrame, maze);
-        if (dist < this.half + player.half + 4 && this.contactTimer <= 0) {
-          player.takeDamage(12);
-          this.contactTimer = 600;
-        }
-      } else {
-        // Archer kites: hold a band of distance, shoot on a timer.
-        if (dist < 170) this.moveToward(-dx, -dy, dtFrame, maze);
-        else if (dist > 280) this.moveToward(dx, dy, dtFrame, maze);
-        if (this.shootTimer <= 0) {
-          ctx.fire(this.x, this.y, dx, dy);
-          this.shootTimer = 1500;
+    // Frozen while stunned: no movement, contact damage, or shooting.
+    if (!stunned) {
+      const dx = player.x - this.x;
+      const dy = player.y - this.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < this.stats.aggro) {
+        if (this.kind === "grunt") {
+          this.moveToward(dx, dy, dtFrame, maze);
+          if (dist < this.half + player.half + 4 && this.contactTimer <= 0) {
+            player.takeDamage(12);
+            this.contactTimer = 600;
+          }
+        } else {
+          // Archer kites: hold a band of distance, shoot on a timer.
+          if (dist < 170) this.moveToward(-dx, -dy, dtFrame, maze);
+          else if (dist > 280) this.moveToward(dx, dy, dtFrame, maze);
+          if (this.shootTimer <= 0) {
+            ctx.fire(this.x, this.y, dx, dy);
+            this.shootTimer = 1500;
+          }
         }
       }
     }
 
-    if (this.hurtFlash > 0) {
-      this.hurtFlash -= dtMs;
-      this.draw(this.hurtFlash > 0 ? 0xffffff : this.stats.color);
-    }
+    this.draw(this.hurtFlash > 0 ? 0xffffff : this.stats.color, stunned);
     this.view.position.set(this.x, this.y);
+  }
+
+  /** Freeze this enemy for `ms`; extends an existing stun rather than shortening it. */
+  stun(ms: number) {
+    this.stunTimer = Math.max(this.stunTimer, ms);
   }
 
   takeDamage(n: number) {
