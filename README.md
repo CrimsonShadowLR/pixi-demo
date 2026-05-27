@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Untitled Maze Game — POC
 
-## Getting Started
+A playable proof-of-concept for a top-down 2D **maze game**, built on **Pixi.js** inside a
+**Next.js** app. Pick a hero, drop into a hand-crafted maze, and win by escaping, clearing
+the room, or looting every relic. Built from the design in
+[`GDD_Untitled_Maze_Game.md`](./GDD_Untitled_Maze_Game.md).
 
-First, run the development server:
+## Gameplay
+
+Pick a hero and a level on the pre-game screen, then play in real time. Fog of war keeps a
+vision circle around you; the rest of the maze is dimmed.
+
+### Heroes
+
+| Hero | Style | Good at |
+|---|---|---|
+| **Warrior** | Tank · melee | Wide cleaving swing that **stuns** enemies; high HP. Clearing rooms, holding ground. |
+| **Scout** | Skirmisher · ranged | Fast movement, kiting projectiles. Reaching the exit and hunting objectives. |
+
+### Levels
+
+| # | Level | Win by | Notes |
+|---|---|---|---|
+| 1 | Catacomb Run | **Escape** — reach the exit | 10-second countdown; run out of time and you lose |
+| 2 | Warband Hall | **Kill all** enemies | Grunts + kiting archers |
+| 3 | Sunken Vault | **Collect** every relic | Archers guard the loot |
+
+### Controls
+
+| Action | Keys |
+|---|---|
+| Move | `W` `A` `S` `D` or arrow keys |
+| Attack | `J` or `Space` |
+
+## Tech stack
+
+- [Next.js 16](https://nextjs.org) (App Router) + React 19
+- [Pixi.js 8](https://pixijs.com) for canvas rendering
+- TypeScript (strict) and Tailwind CSS v4
+- pnpm
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev        # dev server → http://localhost:3000
+pnpm build      # production build
+pnpm lint       # eslint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it works
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The game engine lives in [`game/`](./game) and is framework-agnostic (no React):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `Game.ts` — the orchestrator: ticker loop, camera, fog of war, combat resolution, and
+  win/lose (including the level timer)
+- `Maze.ts` — parses a level's tile layout into a wall grid + spawns and renders it
+- `Player.ts` / `Enemy.ts` / `Projectile.ts` — entities, movement, AI, and combat
+- `heroes.ts` / `levels.ts` / `types.ts` — data: hero stats and hand-crafted maze layouts
+- `input.ts` — keyboard handling
 
-## Learn More
+React only owns the shell: [`app/components/GameCanvas.tsx`](./app/components/GameCanvas.tsx)
+mounts the Pixi `Application` in an effect (canvas is client-only), renders the menu / HUD /
+result overlays, and relays state between the engine and the UI.
 
-To learn more about Next.js, take a look at the following resources:
+## Scope
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This is a POC, not the full game. Compared to the GDD, it currently leaves out: survive /
+protect victory conditions, gear and ability progression, the pre-level loadout screen, the
+hidden minimap pickup, boss phases, and mobile controls.
