@@ -116,6 +116,18 @@ export class Enemy {
     this.stunTimer = Math.max(this.stunTimer, ms);
   }
 
+  /** Shove this enemy `dist` px directly away from a point, stopping at walls. */
+  knockback(maze: Maze, fromX: number, fromY: number, dist: number) {
+    const dx = this.x - fromX;
+    const dy = this.y - fromY;
+    const len = Math.hypot(dx, dy) || 1;
+    const vx = (dx / len) * dist;
+    const vy = (dy / len) * dist;
+    if (!maze.collidesBox(this.x + vx, this.y, this.half)) this.x += vx;
+    if (!maze.collidesBox(this.x, this.y + vy, this.half)) this.y += vy;
+    this.view.position.set(this.x, this.y);
+  }
+
   takeDamage(n: number) {
     this.hp -= n;
     this.hurtFlash = 100;

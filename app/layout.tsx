@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Untitled Maze Game — POC",
-  description: "Top-down maze game POC: 2 heroes, 3 levels, built on Pixi.js.",
+  description: "Top-down maze game POC: 3 heroes, 3 levels, built on Pixi.js.",
 };
 
 export default function RootLayout({

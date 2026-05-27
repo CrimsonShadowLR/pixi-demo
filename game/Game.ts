@@ -16,6 +16,8 @@ interface Fx {
   view: Graphics;
   life: number;
   max: number;
+  /** If true, the fx scales up as it fades (used by the push shockwave ring). */
+  grow?: boolean;
 }
 
 const VISION_RADIUS = 240;
@@ -60,7 +62,7 @@ export class Game {
     this.level = level;
     this.hero = hero;
     this.hooks = hooks;
-    this.input = createInput();
+    this.input = createInput(app.canvas as HTMLCanvasElement);
 
     this.timeLeft = level.timeLimitMs ?? 0;
     this.maze = new Maze(level);
@@ -111,8 +113,9 @@ export class Game {
     const dtFrame = Math.min(ticker.deltaTime, 3);
     const dtMs = Math.min(ticker.deltaMS, 50);
 
-    const fired = this.player.update(dtFrame, dtMs, this.input.state, this.maze);
-    if (fired) this.doPlayerAttack();
+    const action = this.player.update(dtFrame, dtMs, this.input.state, this.maze);
+    if (action.attacked) this.doPlayerAttack();
+    if (action.usedAbility) this.doPlayerAbility();
 
     const ctx = {
       fire: (x: number, y: number, dx: number, dy: number) => {
@@ -174,6 +177,26 @@ export class Game {
     this.spawnSwingFx(reach, Math.acos(Math.max(-1, Math.min(1, arc))));
   }
 
+  private doPlayerAbility() {
+    const ab = this.hero.ability;
+    if (!ab || ab.type !== "push") return;
+    const dmg = this.hero.damage * ab.damageFraction;
+    for (const e of this.enemies) {
+      const dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+      if (dist > ab.radius + e.half) continue;
+      e.knockback(this.maze, this.player.x, this.player.y, ab.knockback);
+      e.takeDamage(dmg);
+    }
+    this.spawnPushFx(ab.radius);
+  }
+
+  private spawnPushFx(radius: number) {
+    const g = new Graphics().circle(0, 0, radius).stroke({ color: 0xf2d68a, width: 5, alpha: 0.9 });
+    g.position.set(this.player.x, this.player.y);
+    this.fxLayer.addChild(g);
+    this.fx.push({ view: g, life: 360, max: 360, grow: true });
+  }
+
   private spawnSwingFx(reach: number, spread: number) {
     const { facing } = this.player;
     const ang = Math.atan2(facing.y, facing.x);
@@ -219,7 +242,9 @@ export class Game {
         f.view.destroy();
         continue;
       }
+      const progress = 1 - f.life / f.max;
       f.view.alpha = f.life / f.max;
+      if (f.grow) f.view.scale.set(0.35 + 0.65 * progress);
       survivors.push(f);
     }
     this.fx = survivors;

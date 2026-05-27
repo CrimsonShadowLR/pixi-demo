@@ -1,5 +1,6 @@
-// Keyboard input. WASD / arrows to move, J or Space to attack.
-// Returns a live state object plus a destroy() to unbind listeners.
+// Input: WASD / arrows move (keyboard), left-click attacks and right-click uses
+// the ability (mouse, bound to the game canvas). Returns a live state object plus
+// a destroy() to unbind every listener.
 
 export interface InputState {
   up: boolean;
@@ -7,6 +8,7 @@ export interface InputState {
   left: boolean;
   right: boolean;
   attack: boolean;
+  ability: boolean;
 }
 
 export interface InputHandle {
@@ -14,10 +16,11 @@ export interface InputHandle {
   destroy: () => void;
 }
 
-export function createInput(): InputHandle {
-  const state: InputState = { up: false, down: false, left: false, right: false, attack: false };
+export function createInput(target: HTMLElement): InputHandle {
+  const state: InputState = { up: false, down: false, left: false, right: false, attack: false, ability: false };
 
-  const set = (code: string, down: boolean): boolean => {
+  // --- Keyboard: movement only ---
+  const setMove = (code: string, down: boolean): boolean => {
     switch (code) {
       case "KeyW":
       case "ArrowUp":
@@ -35,31 +38,47 @@ export function createInput(): InputHandle {
       case "ArrowRight":
         state.right = down;
         return true;
-      case "KeyJ":
-      case "Space":
-        state.attack = down;
-        return true;
       default:
         return false;
     }
   };
 
-  const onDown = (e: KeyboardEvent) => {
-    // Ignore auto-repeat so it does not spam, and stop the page from scrolling.
-    if (set(e.code, true)) e.preventDefault();
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (setMove(e.code, true)) e.preventDefault(); // stop arrow-key page scroll
   };
-  const onUp = (e: KeyboardEvent) => {
-    if (set(e.code, false)) e.preventDefault();
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (setMove(e.code, false)) e.preventDefault();
   };
 
-  window.addEventListener("keydown", onDown);
-  window.addEventListener("keyup", onUp);
+  // --- Mouse: left = attack, right = ability ---
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 0) state.attack = true;
+    else if (e.button === 2) {
+      state.ability = true;
+      e.preventDefault();
+    }
+  };
+  // Release on window so a button held and dragged off the canvas still clears.
+  const onMouseUp = (e: MouseEvent) => {
+    if (e.button === 0) state.attack = false;
+    else if (e.button === 2) state.ability = false;
+  };
+  const onContextMenu = (e: MouseEvent) => e.preventDefault(); // no right-click menu over the game
+
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  target.addEventListener("mousedown", onMouseDown);
+  target.addEventListener("contextmenu", onContextMenu);
+  window.addEventListener("mouseup", onMouseUp);
 
   return {
     state,
     destroy: () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      target.removeEventListener("mousedown", onMouseDown);
+      target.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("mouseup", onMouseUp);
     },
   };
 }

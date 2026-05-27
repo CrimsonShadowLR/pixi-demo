@@ -6,7 +6,7 @@ export default function Home() {
       <main className="flex w-full max-w-[896px] flex-col items-center gap-4">
         <GameCanvas />
         <p className="text-center text-xs text-zinc-500">
-          POC of the Untitled Maze Game GDD — 2 heroes, 3 levels, built on Pixi.js.
+          POC of the Untitled Maze Game GDD — 3 heroes, 3 levels, built on Pixi.js.
         </p>
       </main>
     </div>

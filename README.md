@@ -16,6 +16,7 @@ vision circle around you; the rest of the maze is dimmed.
 |---|---|---|
 | **Warrior** | Tank · melee | Wide cleaving swing that **stuns** enemies; high HP. Clearing rooms, holding ground. |
 | **Scout** | Skirmisher · ranged | Fast movement, kiting projectiles. Reaching the exit and hunting objectives. |
+| **Guardian** | Tank · melee | Slow, near-unkillable. A **360° push** (right-click) knocks the whole crowd back for half damage. Protecting and surviving. |
 
 ### Levels
 
@@ -27,10 +28,11 @@ vision circle around you; the rest of the maze is dimmed.
 
 ### Controls
 
-| Action | Keys |
+| Action | Input |
 |---|---|
 | Move | `W` `A` `S` `D` or arrow keys |
-| Attack | `J` or `Space` |
+| Attack | Left mouse button |
+| Ability | Right mouse button (hero-specific; e.g. Guardian's 360 push) |
 
 ## Tech stack
 

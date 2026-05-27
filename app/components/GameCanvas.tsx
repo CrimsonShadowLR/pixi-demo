@@ -99,7 +99,7 @@ export default function GameCanvas() {
               Time {hud.timer}
             </span>
           )}
-          <span className="ml-auto hidden text-xs text-zinc-400 sm:block">WASD / arrows · J / Space to attack</span>
+          <span className="ml-auto hidden text-xs text-zinc-400 sm:block">WASD / arrows · Left-click attack · Right-click ability</span>
         </div>
       )}
 
@@ -117,7 +117,7 @@ export default function GameCanvas() {
 
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">Hero</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               {HERO_ORDER.map((id) => {
                 const h = HEROES[id];
                 const active = id === heroId;

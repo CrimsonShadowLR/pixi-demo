@@ -16,8 +16,24 @@ export const HEROES: Record<HeroId, HeroDef> = {
     attackArc: -0.35, // wide ~110-deg sweep — cleaves a crowd
     stunMs: 500,
     attackCooldown: 420,
-    bonusConditions: ["kill_all", "survive", "protect"],
+    bonusConditions: ["kill_all", "survive"],
     blurb: "Wide cleaving swing that stuns. Highest durability — best at clearing rooms and holding ground.",
+  },
+  guardian: {
+    id: "guardian",
+    name: "Guardian",
+    role: "Tank / Protector",
+    color: 0xf2b134,
+    maxHp: 190,
+    speed: 2.0,
+    attackType: "melee",
+    damage: 28,
+    attackRange: 60,
+    attackCooldown: 450,
+    // 360 push: shoves every enemy within ~3 tiles outward for half attack damage.
+    ability: { type: "push", radius: 132, knockback: 90, cooldownMs: 4000, damageFraction: 0.5 },
+    bonusConditions: ["protect", "survive"],
+    blurb: "Slow, near-unkillable bulwark. A 360 shockwave (right-click) shoves the whole crowd back. Best at protecting and surviving.",
   },
   scout: {
     id: "scout",
@@ -35,4 +51,4 @@ export const HEROES: Record<HeroId, HeroDef> = {
   },
 };
 
-export const HERO_ORDER: HeroId[] = ["warrior", "scout"];
+export const HERO_ORDER: HeroId[] = ["warrior", "scout", "guardian"];

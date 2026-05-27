@@ -1,9 +1,23 @@
 // Shared game types. Pure data — no Pixi imports here so the model stays
 // reasoning-friendly and engine code can depend on it freely.
 
-export type HeroId = "warrior" | "scout";
+export type HeroId = "warrior" | "scout" | "guardian";
 
 export type VictoryType = "escape" | "kill_all" | "collect" | "survive" | "protect";
+
+/** An active ability fired with the ability key (separate from the basic attack). */
+export interface HeroAbility {
+  /** Radial knockback burst around the hero. */
+  type: "push";
+  /** Effect radius in pixels. */
+  radius: number;
+  /** Distance, in pixels, enemies are shoved outward. */
+  knockback: number;
+  /** Cooldown in milliseconds. */
+  cooldownMs: number;
+  /** Damage dealt as a fraction of the hero's normal `damage`. */
+  damageFraction: number;
+}
 
 export interface HeroDef {
   id: HeroId;
@@ -25,6 +39,8 @@ export interface HeroDef {
   attackArc?: number;
   /** If set, melee hits stun the enemy for this many ms. */
   stunMs?: number;
+  /** Optional active ability fired with the ability key. */
+  ability?: HeroAbility;
   /** Milliseconds between attacks. */
   attackCooldown: number;
   /** Victory conditions this hero is statistically built for (GDD §Heroes). */
