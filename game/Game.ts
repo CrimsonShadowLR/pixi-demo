@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Ticker } from "pixi.js";
-import type { HeroDef, LevelDef, GameHooks, HudState } from "@/game/types";
+import type { HeroDef, LevelDef, GameHooks, HudState, DashAbility, BlinkAbility } from "@/game/types";
 import { Maze } from "@/game/Maze";
 import { Player } from "@/game/Player";
 import { Enemy } from "@/game/Enemy";
@@ -18,6 +18,26 @@ interface Fx {
   max: number;
   /** If true, the fx scales up as it fades (used by the push shockwave ring). */
   grow?: boolean;
+}
+
+/** A tutorial pickup (key or equipable) sitting on a floor. */
+interface Pickup {
+  col: number;
+  row: number;
+  x: number;
+  y: number;
+  floor: number;
+  view: Graphics;
+}
+
+/** A locked door the player opens with a key. */
+interface Door {
+  col: number;
+  row: number;
+  x: number;
+  y: number;
+  floor: number;
+  locked: boolean;
 }
 
 const VISION_RADIUS = 240;
@@ -51,10 +71,22 @@ export class Game {
   private readonly light = new Graphics();
   private fogEnabled = true;
 
+  // --- Tutorial interactions (only populated when the level uses k/q/D tiles) ---
+  private keys: Pickup[] = [];
+  private items: Pickup[] = [];
+  private doors: Door[] = [];
+  private hasKey = false;
+  private equipped = false;
+  private prevInteract = false;
+  private tutorialHint = ""; // contextual "Press E ..." prompt for this frame
+  /** Debounce so standing on a ladder swaps floors once, not every frame. */
+  private floorSwitchArmed = true;
+
   private readonly input: InputHandle;
   private over = false;
   private hudTimer = 0;
   private lastProgress = "";
+  private lastPrompt: string | undefined;
   private timeLeft: number; // ms remaining on a timed level (0 if untimed)
 
   constructor(app: Application, level: LevelDef, hero: HeroDef, hooks: GameHooks) {
@@ -80,6 +112,23 @@ export class Game {
       const e = new Enemy(s.kind, s.x, s.y);
       this.enemies.push(e);
       this.world.addChild(e.view);
+    }
+    for (const k of this.maze.keys) {
+      const view = makeKeyView();
+      view.position.set(k.x, k.y);
+      view.visible = k.floor === this.maze.active; // only shown on its own floor
+      this.world.addChild(view);
+      this.keys.push({ ...k, view });
+    }
+    for (const it of this.maze.items) {
+      const view = makeCharmView();
+      view.position.set(it.x, it.y);
+      view.visible = it.floor === this.maze.active;
+      this.world.addChild(view);
+      this.items.push({ ...it, view });
+    }
+    for (const d of this.maze.doors) {
+      this.doors.push({ col: d.col, row: d.row, x: d.x, y: d.y, floor: d.floor, locked: true });
     }
     this.world.addChild(this.fxLayer, this.player.view);
     this.app.stage.addChild(this.world);
@@ -116,6 +165,7 @@ export class Game {
     const action = this.player.update(dtFrame, dtMs, this.input.state, this.maze);
     if (action.attacked) this.doPlayerAttack();
     if (action.usedAbility) this.doPlayerAbility();
+    this.updateFloorTransition();
 
     const ctx = {
       fire: (x: number, y: number, dx: number, dy: number) => {
@@ -129,6 +179,7 @@ export class Game {
     this.updateProjectiles(dtFrame, dtMs);
     this.updateFx(dtMs);
     this.collectRelics();
+    this.handleInteractions();
 
     // Reap dead enemies.
     if (this.enemies.some((e) => e.dead)) {
@@ -179,15 +230,97 @@ export class Game {
 
   private doPlayerAbility() {
     const ab = this.hero.ability;
-    if (!ab || ab.type !== "push") return;
-    const dmg = this.hero.damage * ab.damageFraction;
-    for (const e of this.enemies) {
-      const dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
-      if (dist > ab.radius + e.half) continue;
-      e.knockback(this.maze, this.player.x, this.player.y, ab.knockback);
-      e.takeDamage(dmg);
+    if (!ab) return;
+    if (ab.type === "push") {
+      const dmg = this.hero.damage * ab.damageFraction;
+      for (const e of this.enemies) {
+        const dist = Math.hypot(e.x - this.player.x, e.y - this.player.y);
+        if (dist > ab.radius + e.half) continue;
+        e.knockback(this.maze, this.player.x, this.player.y, ab.knockback);
+        e.takeDamage(dmg);
+      }
+      this.spawnPushFx(ab.radius);
+    } else if (ab.type === "dash") {
+      this.doDash(ab);
+    } else {
+      this.doBlink(ab);
     }
-    this.spawnPushFx(ab.radius);
+  }
+
+  /**
+   * Scout blink: teleport along facing, ignoring walls. Lands on the farthest
+   * clear cell within range (walking the target back toward the player if the
+   * full distance ends inside a wall), so it never strands the player in solid.
+   */
+  private doBlink(ab: BlinkAbility) {
+    const { facing } = this.player;
+    const startX = this.player.x;
+    const startY = this.player.y;
+    const step = this.player.half;
+    for (let d = ab.distance; d >= step; d -= step) {
+      const tx = startX + facing.x * d;
+      const ty = startY + facing.y * d;
+      if (!this.maze.collidesBox(tx, ty, this.player.half)) {
+        this.player.x = tx;
+        this.player.y = ty;
+        this.player.view.position.set(tx, ty);
+        this.spawnBlinkFx(startX, startY, tx, ty);
+        return;
+      }
+    }
+    // Fully boxed in — nowhere clear to land; the blink fizzles in place.
+  }
+
+  /**
+   * Warrior dash: step the player forward along its facing, stopping at walls.
+   * Any enemy whose center falls inside the swept corridor takes half attack
+   * damage and is shoved off the dash origin — each enemy hit at most once.
+   */
+  private doDash(ab: DashAbility) {
+    const { facing } = this.player;
+    const dmg = this.hero.damage * ab.damageFraction;
+    const startX = this.player.x;
+    const startY = this.player.y;
+    const STEPS = 12;
+    const stepLen = ab.distance / STEPS;
+    const hit = new Set<Enemy>();
+
+    for (let i = 0; i < STEPS; i++) {
+      const nx = this.player.x + facing.x * stepLen;
+      const ny = this.player.y + facing.y * stepLen;
+      if (this.maze.collidesBox(nx, ny, this.player.half)) break; // wall stops the lunge
+      this.player.x = nx;
+      this.player.y = ny;
+      for (const e of this.enemies) {
+        if (hit.has(e)) continue;
+        if (Math.hypot(e.x - this.player.x, e.y - this.player.y) <= ab.radius + e.half) {
+          e.takeDamage(dmg);
+          e.knockback(this.maze, startX, startY, ab.knockback);
+          hit.add(e);
+        }
+      }
+    }
+    this.player.view.position.set(this.player.x, this.player.y);
+    this.spawnDashFx(startX, startY, this.player.x, this.player.y, ab.radius);
+  }
+
+  private spawnDashFx(x0: number, y0: number, x1: number, y1: number, width: number) {
+    const g = new Graphics();
+    g.moveTo(x0, y0)
+      .lineTo(x1, y1)
+      .stroke({ color: 0xf2d68a, width: width * 1.5, alpha: 0.55, cap: "round" });
+    this.fxLayer.addChild(g);
+    this.fx.push({ view: g, life: 220, max: 220 });
+  }
+
+  private spawnBlinkFx(x0: number, y0: number, x1: number, y1: number) {
+    const g = new Graphics();
+    g.moveTo(x0, y0)
+      .lineTo(x1, y1)
+      .stroke({ color: 0x2ec4b6, width: 5, alpha: 0.45, cap: "round" });
+    g.circle(x0, y0, this.player.half).stroke({ color: 0x2ec4b6, width: 3, alpha: 0.6 }); // after-image
+    this.fxLayer.addChild(g);
+    this.fx.push({ view: g, life: 240, max: 240 });
   }
 
   private spawnPushFx(radius: number) {
@@ -263,6 +396,95 @@ export class Game {
     this.relics = survivors;
   }
 
+  /**
+   * Steps onto a ladder swap which floor is rendered/active, so the upper
+   * platform overlaps the ground room (and vice-versa). Armed-flag debounces it
+   * so one step = one swap, and you must leave the ladder before swapping back.
+   */
+  private updateFloorTransition() {
+    if (this.maze.layerCount < 2) return;
+    const t = this.maze.tile;
+    const col = Math.floor(this.player.x / t);
+    const row = Math.floor(this.player.y / t);
+    const onLadder = this.maze.isLadderAt(col, row);
+
+    if (onLadder && this.floorSwitchArmed) {
+      const next = this.maze.active === 0 ? 1 : 0;
+      // Only swap if the same cell is standable on the target floor.
+      if (!this.maze.isWallAt(col, row, next)) {
+        this.maze.setActive(next);
+        this.floorSwitchArmed = false;
+        // Snap to the ladder cell's center so the collision box sits cleanly
+        // inside it. Without this, climbing from below leaves the box dipping
+        // into the wall row beyond the landing on the new floor — and since
+        // every direction keeps it there, the player gets stuck.
+        this.player.x = col * t + t / 2;
+        this.player.y = row * t + t / 2;
+      }
+    } else if (!onLadder) {
+      this.floorSwitchArmed = true;
+    }
+  }
+
+  /**
+   * Tutorial E-interactions: take a key, unlock a door with it, equip an item.
+   * No-op on levels without k/q/D tiles (the lists stay empty). Only the active
+   * floor's interactables count (floors overlap in world space). Sets the
+   * contextual prompt every frame; acts only on the rising edge of the E key.
+   */
+  private handleInteractions() {
+    const t = this.maze.tile;
+    const pickR = t * 0.9;
+    const doorR = t * 1.2;
+    const floor = this.maze.active;
+    const near = (x: number, y: number, r: number) => Math.hypot(this.player.x - x, this.player.y - y) <= r;
+
+    // Pickups only render on their own floor (floors share coordinates).
+    for (const k of this.keys) k.view.visible = k.floor === floor;
+    for (const it of this.items) it.view.visible = it.floor === floor;
+
+    const key = this.keys.find((k) => k.floor === floor);
+    const item = this.items.find((it) => it.floor === floor);
+    const door = this.doors.find((d) => d.locked && d.floor === floor);
+
+    // Contextual prompt (closest actionable thing wins).
+    let prompt = "";
+    if (key && near(key.x, key.y, pickR)) {
+      prompt = "Press E — take the Iron Key";
+    } else if (door && near(door.x, door.y, doorR)) {
+      prompt = this.hasKey ? "Press E — unlock the vault" : "Locked. Find the key first.";
+    } else if (item && near(item.x, item.y, pickR)) {
+      prompt = "Press E — equip the Training Charm";
+    } else if (this.hasKey && !this.equipped && item && !door) {
+      prompt = "Vault open — grab the charm inside";
+    }
+    this.tutorialHint = prompt;
+
+    // Edge-detect E so one press does one thing.
+    const pressed = this.input.state.interact && !this.prevInteract;
+    this.prevInteract = this.input.state.interact;
+    if (!pressed) return;
+
+    if (key && near(key.x, key.y, pickR)) {
+      key.view.destroy();
+      this.keys = this.keys.filter((k) => k !== key);
+      this.hasKey = true;
+      return;
+    }
+    if (door && this.hasKey && near(door.x, door.y, doorR)) {
+      door.locked = false;
+      this.maze.openDoor(door.col, door.row, door.floor);
+      return;
+    }
+    if (item && near(item.x, item.y, pickR)) {
+      // Mock equipable: hero-agnostic, no stat effect, not persisted anywhere,
+      // so it never carries into other levels. Picking it up wins the tutorial.
+      item.view.destroy();
+      this.items = this.items.filter((it) => it !== item);
+      this.equipped = true;
+    }
+  }
+
   private updateCamera() {
     const vw = this.app.screen.width;
     const vh = this.app.screen.height;
@@ -294,13 +516,25 @@ export class Game {
       case "collect":
         progress = `Relics ${collected}/${this.totalRelics}`;
         break;
+      case "tutorial": {
+        const onPlatform = this.maze.active > 0;
+        const vaultLocked = this.doors.some((d) => d.locked);
+        if (this.equipped) progress = "Charm equipped!";
+        else if (this.hasKey && !vaultLocked) progress = "Grab the charm in the vault";
+        else if (this.hasKey) progress = "Unlock the vault with the key";
+        else if (onPlatform) progress = "Find the key in the open room";
+        else progress = "Climb the ladder to the platform";
+        break;
+      }
       default:
         progress = this.level.objectiveText;
     }
 
-    if (!force && this.hudTimer < 120 && progress === this.lastProgress) return;
+    const prompt = this.tutorialHint || undefined;
+    if (!force && this.hudTimer < 120 && progress === this.lastProgress && prompt === this.lastPrompt) return;
     this.hudTimer = 0;
     this.lastProgress = progress;
+    this.lastPrompt = prompt;
 
     let timer: string | undefined;
     let timerUrgent = false;
@@ -316,6 +550,7 @@ export class Game {
       maxHp: this.player.maxHp,
       objective: this.level.objectiveText,
       progress,
+      prompt,
       timer,
       timerUrgent,
     };
@@ -338,6 +573,9 @@ export class Game {
       case "collect":
         if (this.relics.length === 0) this.end("win");
         break;
+      case "tutorial":
+        if (this.equipped) this.end("win");
+        break;
     }
   }
 
@@ -359,4 +597,24 @@ export class Game {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+/** A small gold key icon for the tutorial key pickup. */
+function makeKeyView(): Graphics {
+  const g = new Graphics();
+  // Bow (ring) + stem + two teeth.
+  g.circle(-7, 0, 6).stroke({ color: 0xf5d142, width: 3 });
+  g.rect(-1, -2, 14, 4).fill(0xf5d142);
+  g.rect(9, 2, 3, 5).fill(0xf5d142);
+  g.rect(4, 2, 3, 5).fill(0xf5d142);
+  g.alpha = 0.95;
+  return g;
+}
+
+/** A glowing charm/gem for the tutorial equipable. */
+function makeCharmView(): Graphics {
+  const g = new Graphics();
+  g.circle(0, 0, 15).fill({ color: 0x7be0ff, alpha: 0.18 }); // soft halo
+  g.poly([0, -11, 10, 0, 0, 11, -10, 0]).fill(0x4fd1e0).stroke({ color: 0xffffff, width: 2 });
+  return g;
 }

@@ -99,13 +99,22 @@ export default function GameCanvas() {
               Time {hud.timer}
             </span>
           )}
-          <span className="ml-auto hidden text-xs text-zinc-400 sm:block">WASD / arrows · Left-click attack · Right-click ability</span>
+          <span className="ml-auto hidden text-xs text-zinc-400 sm:block">WASD move · Left-click attack · Right-click ability · E interact</span>
         </div>
       )}
 
       {/* Canvas + full-cover overlays (menu, results) */}
       <div className="relative w-full" style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
         <div ref={hostRef} className="h-full w-full" />
+
+        {/* Contextual interaction prompt (tutorial E-hints) */}
+        {screen === "playing" && hud?.prompt && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center">
+            <span className="rounded-full bg-black/75 px-4 py-1.5 font-mono text-sm font-semibold text-amber-300 shadow-lg ring-1 ring-amber-300/30">
+              {hud.prompt}
+            </span>
+          </div>
+        )}
 
       {/* Pre-level menu */}
       {screen === "menu" && (

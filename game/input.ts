@@ -1,6 +1,6 @@
-// Input: WASD / arrows move (keyboard), left-click attacks and right-click uses
-// the ability (mouse, bound to the game canvas). Returns a live state object plus
-// a destroy() to unbind every listener.
+// Input: WASD moves, E interacts (keyboard); left-click attacks and right-click
+// uses the ability (mouse, bound to the game canvas). Returns a live state
+// object plus a destroy() to unbind every listener.
 
 export interface InputState {
   up: boolean;
@@ -9,6 +9,8 @@ export interface InputState {
   right: boolean;
   attack: boolean;
   ability: boolean;
+  /** E key — interact (take key / unlock door / equip). Edge-detected by the Game. */
+  interact: boolean;
 }
 
 export interface InputHandle {
@@ -17,25 +19,24 @@ export interface InputHandle {
 }
 
 export function createInput(target: HTMLElement): InputHandle {
-  const state: InputState = { up: false, down: false, left: false, right: false, attack: false, ability: false };
+  const state: InputState = { up: false, down: false, left: false, right: false, attack: false, ability: false, interact: false };
 
-  // --- Keyboard: movement only ---
+  // --- Keyboard: movement + interact (E) ---
   const setMove = (code: string, down: boolean): boolean => {
     switch (code) {
+      case "KeyE":
+        state.interact = down;
+        return true;
       case "KeyW":
-      case "ArrowUp":
         state.up = down;
         return true;
       case "KeyS":
-      case "ArrowDown":
         state.down = down;
         return true;
       case "KeyA":
-      case "ArrowLeft":
         state.left = down;
         return true;
       case "KeyD":
-      case "ArrowRight":
         state.right = down;
         return true;
       default:
@@ -44,7 +45,7 @@ export function createInput(target: HTMLElement): InputHandle {
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (setMove(e.code, true)) e.preventDefault(); // stop arrow-key page scroll
+    if (setMove(e.code, true)) e.preventDefault();
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (setMove(e.code, false)) e.preventDefault();
