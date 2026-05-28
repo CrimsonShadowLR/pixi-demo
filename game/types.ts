@@ -108,6 +108,18 @@ export interface HudState {
   timer?: string;
   /** True when remaining time is low, so the HUD can highlight it. */
   timerUrgent?: boolean;
+  /** Ability cooldown status — only present when the hero has an ability. */
+  ability?: {
+    /** Letter shown inside the indicator (e.g. "S"). */
+    hotkey: string;
+    /** Full cooldown duration in ms — drives the drain animation. */
+    cooldownMs: number;
+    /**
+     * Counter that ticks up each time the ability fires. The HUD uses it as a
+     * React deps signal to (re)start the drain animation. 0 = never used yet.
+     */
+    useCount: number;
+  };
 }
 
 export type GameResult = "win" | "lose";
